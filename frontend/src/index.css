@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #A3E635;
+  --color-primary-dark: #064E3B;
+  --color-secondary: #111827;
+  --color-background: #FFFFFF;
+  --color-surface: #F9FAFB;
+  --color-text-main: #0F172A;
+  --radius-4xl: 2rem;
+}
+
+:root {
+  background-color: var(--color-background);
+  color: var(--color-text-main);
+}
+
+body {
+  margin: 0;
+  font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.donatly-card {
+  background: var(--color-surface);
+  border-radius: 2rem;
+  padding: 2rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.donatly-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.btn-primary {
+  @apply bg-primary hover:bg-[#84CC16] text-black font-bold px-8 py-3 rounded-full transition-all;
+}
+
+.btn-dark {
+  @apply bg-primary-dark hover:bg-[#065f46] text-white font-bold px-8 py-3 rounded-full transition-all;
+}
+
+@keyframes progress-shrink {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+.animate-progress-shrink {
+  animation: progress-shrink 5s linear forwards;
+}
+
+.donatly-popup .leaflet-popup-content-wrapper {
+  @apply rounded-[1.5rem] shadow-2xl border-none p-0 overflow-hidden;
+}
+
+.donatly-popup .leaflet-popup-tip {
+  @apply hidden;
+}
