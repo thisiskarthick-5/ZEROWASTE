@@ -52,7 +52,7 @@ router.get('/nearby', async (req, res) => {
           $maxDistance: parseInt(radius)
         }
       }
-    }).populate('donor', 'name address');
+    }).populate('donor', 'name address email phone');
 
     res.json(foodPosts);
   } catch (err) {
