@@ -4,57 +4,77 @@ import { API_URL } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import MapComponent from '../components/MapComponent';
-import { MapPin, Search, CheckCircle, UserPlus, Heart, Shield, Clock, Package, ChevronRight, LayoutGrid, Users } from 'lucide-react';
+import DashboardLayout from '../components/DashboardLayout';
+import { 
+  Plus, 
+  MapPin, 
+  Clock, 
+  CheckCircle, 
+  Navigation, 
+  Heart, 
+  Shield, 
+  Users,
+  LayoutGrid,
+  Package,
+  Activity,
+  ArrowRight,
+  Bell,
+  X,
+  Mail,
+  Phone
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function TrustDashboard() {
   const { userData } = useAuth();
   const socket = useSocket();
-  const [nearbyFood, setNearbyFood] = useState([]);
-  const [radius, setRadius] = useState(5000); // 5km
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [nearbyDonations, setNearbyDonations] = useState([]);
+  const [myMissions, setMyMissions] = useState([]);
   const [volunteers, setVolunteers] = useState([]);
-  const [myRequests, setMyRequests] = useState([]);
-  const [selectedVolunteer, setSelectedVolunteer] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [radius, setRadius] = useState(5000); // meters
+  const [selectedDonation, setSelectedDonation] = useState(null);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     if (userData) {
-      fetchNearbyFood();
+      fetchNearby();
+      fetchMyMissions();
       fetchVolunteers();
-      fetchMyRequests();
     }
   }, [userData, radius]);
 
   useEffect(() => {
     if (!socket) return;
-
-    socket.on('newDonation', () => fetchNearbyFood());
-    socket.on('foodAccepted', () => {
-      fetchNearbyFood();
-      fetchMyRequests();
+    socket.on('newDonation', () => fetchNearby());
+    socket.on('missionUpdated', () => {
+      fetchNearby();
+      fetchMyMissions();
     });
-    socket.on('statusUpdated', () => fetchMyRequests());
-
     return () => {
       socket.off('newDonation');
-      socket.off('foodAccepted');
-      socket.off('statusUpdated');
+      socket.off('missionUpdated');
     };
   }, [socket]);
 
-  async function fetchNearbyFood() {
-    if (!userData?.location?.coordinates) return;
-    setLoading(true);
-    setError(null);
+  async function fetchNearby() {
     try {
-      const { coordinates } = userData.location;
-      const res = await axios.get(`${API_URL}/food/nearby?lat=${coordinates[1]}&lng=${coordinates[0]}&radius=${radius}`);
-      setNearbyFood(res.data);
+      if (!userData?.location?.coordinates) return;
+      const [lng, lat] = userData.location.coordinates;
+      const res = await axios.get(`${API_URL}/food/nearby?lat=${lat}&lng=${lng}&radius=${radius}`);
+      setNearbyDonations(res.data);
     } catch (err) {
-      console.error('Error fetching nearby food:', err);
-      setError(err.response?.data?.msg || 'Could not find nearby donations.');
+      console.error(err);
     }
-    setLoading(false);
+  }
+
+  async function fetchMyMissions() {
+    try {
+      const res = await axios.get(`${API_URL}/requests/my/${userData.firebaseId}`);
+      setMyMissions(res.data);
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   async function fetchVolunteers() {
@@ -66,263 +86,265 @@ export default function TrustDashboard() {
     }
   }
 
-  async function fetchMyRequests() {
-    try {
-      const res = await axios.get(`${API_URL}/requests/my/${userData.firebaseId}`);
-      setMyRequests(res.data);
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleAccept(foodId) {
+  async function acceptDonation() {
+    if (!selectedDonation) return;
     try {
       await axios.post(`${API_URL}/requests/accept`, {
-        foodId,
-        trustFirebaseId: userData.firebaseId
+        trustFirebaseId: userData.firebaseId,
+        foodId: selectedDonation._id
       });
-      fetchNearbyFood();
-      fetchMyRequests();
+      setShowModal(false);
+      setSelectedDonation(null);
+      fetchNearby();
+      fetchMyMissions();
     } catch (err) {
       console.error(err);
     }
   }
 
-  async function handleAssign(requestId) {
-    if (!selectedVolunteer[requestId]) return;
+  async function handleAssign(requestId, volunteerId) {
+    if (!volunteerId) return;
     try {
-      await axios.patch(`${API_URL}/requests/assign`, {
-        requestId,
-        volunteerId: selectedVolunteer[requestId]
-      });
-      fetchMyRequests();
+      await axios.patch(`${API_URL}/requests/assign`, { requestId, volunteerId });
+      fetchMyMissions();
     } catch (err) {
       console.error(err);
     }
   }
 
-  if (!userData?.location?.coordinates) {
+  if (!userData) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-white">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-primary mx-auto"></div>
-          <p className="text-slate-400 font-bold">Loading dashboard...</p>
-        </div>
+      <div className="flex h-screen items-center justify-center bg-white">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-surface px-6 py-12">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
-          <div>
-            <h1 className="text-4xl font-black text-primary-dark mb-2">Trust Dashboard</h1>
-            <p className="text-slate-500 font-medium text-lg">Manage community support and coordination.</p>
-          </div>
-          <div className="bg-white px-6 py-3 rounded-2xl shadow-sm flex items-center gap-4">
-            <div className="bg-primary p-2 rounded-xl">
-               <Shield className="text-primary-dark" size={20} />
-            </div>
-            <div>
-              <div className="text-xs font-black uppercase tracking-wider text-slate-400">Trust Hub</div>
-              <div className="text-sm font-black text-primary-dark truncate max-w-[200px]">{userData.name}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-3 space-y-12">
-            
-            {/* Phase 1: Available Food */}
-            <section>
-              <div className="flex justify-between items-center mb-8">
-                <h2 className="text-2xl font-black text-primary-dark flex items-center gap-3">
-                  <div className="bg-primary p-2 rounded-xl text-primary-dark">
-                    <Heart size={24} />
+    <DashboardLayout role="trust">
+      <AnimatePresence>
+        {showModal && selectedDonation && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowModal(false)}
+              className="absolute inset-0 bg-primary-dark/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden"
+            >
+              <div className="p-12 space-y-8">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-3xl font-black text-primary-dark mb-2">Confirm Acceptance</h2>
+                    <p className="text-slate-400 font-bold">Please verify donor contact info before proceeding.</p>
                   </div>
-                  Nearby Donations
-                </h2>
-                <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm">
-                  <span className="text-xs font-black text-slate-400 uppercase ml-2">Radius:</span>
-                  <select 
-                    className="bg-surface border-none px-4 py-2 rounded-xl outline-none font-bold text-sm"
-                    value={radius}
-                    onChange={e => setRadius(Number(e.target.value))}
-                  >
-                    <option value={2000}>2 km</option>
-                    <option value={5000}>5 km</option>
-                    <option value={10000}>10 km</option>
-                  </select>
+                  <button onClick={() => setShowModal(false)} className="text-slate-300 hover:text-red-400 transition-colors">
+                    <X size={32} />
+                  </button>
+                </div>
+
+                <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 space-y-6">
+                   <div className="flex items-center gap-6">
+                      <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-primary shadow-sm">
+                         <Mail size={24} />
+                      </div>
+                      <div>
+                         <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Donor Email</p>
+                         <p className="font-bold text-primary-dark">{selectedDonation.donor?.email || 'N/A'}</p>
+                      </div>
+                   </div>
+                   <div className="flex items-center gap-6">
+                      <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-primary shadow-sm">
+                         <Phone size={24} />
+                      </div>
+                      <div>
+                         <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Donor Phone</p>
+                         <p className="font-bold text-primary-dark">{selectedDonation.donor?.phone || 'Not provided'}</p>
+                      </div>
+                   </div>
+                   <div className="flex items-center gap-6">
+                      <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-primary shadow-sm">
+                         <MapPin size={24} />
+                      </div>
+                      <div>
+                         <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Pickup Address</p>
+                         <p className="font-bold text-primary-dark">{selectedDonation.donor?.address || 'N/A'}</p>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="flex gap-4">
+                   <button 
+                     onClick={() => setShowModal(false)}
+                     className="flex-1 py-5 rounded-2xl font-black text-slate-400 hover:bg-slate-50 transition-all border border-slate-100"
+                   >
+                     Go Back
+                   </button>
+                   <button 
+                     onClick={acceptDonation}
+                     className="flex-[2] bg-primary-dark text-white py-5 rounded-2xl font-black shadow-xl shadow-primary-dark/10 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
+                   >
+                      Confirm & Accept <ArrowRight size={20} />
+                   </button>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
-              {loading ? (
-                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[3rem] shadow-xl shadow-black/5">
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-primary mb-4"></div>
-                  <p className="text-slate-400 font-bold">Scanning for food...</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {nearbyFood.map(food => (
-                    <div key={food._id} className="bg-white p-6 rounded-[2.5rem] shadow-xl shadow-black/5 border border-transparent hover:border-primary transition-all group">
-                      <div className="flex justify-between items-start mb-6">
-                        <div className="bg-surface p-4 rounded-2xl">
-                           <Package className="text-primary" size={32} />
-                        </div>
-                        <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider ${
-                           food.type === 'Veg' ? 'bg-primary/20 text-primary-dark' : 'bg-orange-50 text-orange-500'
-                        }`}>
-                          {food.type}
-                        </span>
+      <div className="max-w-7xl mx-auto space-y-20 pb-20">
+        <header className="flex flex-col md:flex-row justify-between items-start gap-8">
+          <div>
+            <h1 className="text-[3.5rem] font-black text-primary-dark leading-none mb-4">Trust Dashboard</h1>
+            <p className="text-slate-500 font-bold text-lg">Manage community coordination and rescue missions.</p>
+          </div>
+          
+          <div className="bg-white p-2 rounded-[2rem] shadow-sm flex items-center border border-slate-100 mt-4 h-fit">
+             <span className="text-[10px] font-black uppercase text-slate-400 px-6 tracking-[0.2em]">Radius</span>
+             <div className="flex bg-slate-50 p-1.5 rounded-[1.5rem]">
+               {[2000, 5000, 10000].map((r) => (
+                 <button 
+                   key={r}
+                   onClick={() => setRadius(r)}
+                   className={`px-6 py-2.5 rounded-2xl text-xs font-black transition-all ${radius === r ? 'bg-white text-primary-dark shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                 >
+                   {r/1000}km
+                 </button>
+               ))}
+             </div>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+          <section className="space-y-8">
+            <h2 className="text-2xl font-black text-primary-dark flex items-center gap-4">
+              <div className="bg-primary p-2.5 rounded-2xl shadow-lg shadow-primary/20 text-primary-dark">
+                <MapPin size={24} />
+              </div>
+              Nearby Donations
+              <div className="ml-auto flex bg-slate-100 p-1 rounded-2xl">
+                 {[2000, 5000, 10000].map(r => (
+                   <button 
+                     key={r}
+                     onClick={() => setRadius(r)}
+                     className={`px-4 py-2 rounded-xl text-[10px] font-black tracking-widest transition-all ${radius === r ? 'bg-white text-primary-dark shadow-sm' : 'text-slate-400'}`}
+                   >
+                     {r/1000}KM
+                   </button>
+                 ))}
+              </div>
+            </h2>
+
+            <div className="grid grid-cols-1 gap-6">
+              <AnimatePresence>
+                {nearbyDonations.map((post, idx) => (
+                  <motion.div 
+                    key={post._id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    className="bg-white p-8 rounded-[3rem] shadow-xl shadow-black/5 flex flex-col sm:flex-row justify-between items-center gap-8 border border-transparent hover:border-primary transition-all group"
+                  >
+                    <div className="flex items-center gap-6">
+                      <div className="bg-slate-50 p-5 rounded-3xl group-hover:bg-primary/10 transition-colors">
+                        <Package className="text-primary" size={32} />
                       </div>
-
-                      <h3 className="text-2xl font-black text-primary-dark mb-2">{food.foodName}</h3>
-                      <p className="text-slate-400 font-bold mb-6">Donor: {food.donor?.name || 'Anonymous'}</p>
-
-                      <div className="bg-surface p-4 rounded-2xl mb-8 space-y-2">
-                        <div className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest">
-                           <Clock size={14} /> Expires
-                        </div>
-                        <p className="text-sm font-bold text-primary-dark">{new Date(food.expiryTime).toLocaleString()}</p>
+                      <div>
+                        <h3 className="text-xl font-black text-primary-dark mb-1">{post.foodName}</h3>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{post.type} • {post.donor?.name || 'Donor'}</p>
                       </div>
-
-                      <button 
-                        onClick={() => handleAccept(food._id)}
-                        className="w-full btn-dark py-4 rounded-2xl text-sm flex items-center justify-center gap-2 group-hover:bg-primary group-hover:text-primary-dark transition-all"
-                      >
-                        Accept Donation <ChevronRight size={18} />
-                      </button>
                     </div>
-                  ))}
-                  {nearbyFood.length === 0 && (
-                    <div className="col-span-full donatly-card bg-white py-20">
-                       <p className="text-slate-400 font-bold">No new donations in this radius.</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </section>
+                    <button 
+                      onClick={() => {
+                        setSelectedDonation(post);
+                        setShowModal(true);
+                      }}
+                      className="w-full sm:w-auto btn-dark py-4 px-8 text-sm flex items-center gap-3 active:scale-95 transition-all text-white"
+                    >
+                      Accept <ArrowRight size={18} />
+                    </button>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              {nearbyDonations.length === 0 && <p className="text-center py-12 text-slate-400 font-bold italic">No donations in this range...</p>}
+            </div>
+          </section>
 
-            {/* Phase 2: Active Requests & Volunteer Assignment */}
-            <section>
-              <h2 className="text-2xl font-black text-primary-dark mb-8 flex items-center gap-3">
-                <div className="bg-primary p-2 rounded-xl text-primary-dark">
-                  <LayoutGrid size={24} />
+          <section className="space-y-8">
+            <h2 className="text-2xl font-black text-primary-dark flex items-center gap-4">
+              <div className="bg-primary p-2.5 rounded-2xl shadow-lg shadow-primary/20 text-primary-dark">
+                <Activity size={24} />
+              </div>
+              Live Regional View
+            </h2>
+            <div className="rounded-[3rem] overflow-hidden border-4 border-white shadow-2xl h-[500px]">
+              <MapComponent 
+                center={userData?.location?.coordinates ? { lat: userData.location.coordinates[1], lng: userData.location.coordinates[0] } : { lat: 20.5937, lng: 78.9629 }}
+                markers={[
+                  ...(userData?.location ? [{
+                    position: { lat: userData.location.coordinates[1], lng: userData.location.coordinates[0] },
+                    title: "Your Trust Center"
+                  }] : []),
+                  ...nearbyDonations.map(d => ({
+                    position: { lat: d.location.coordinates[1], lng: d.location.coordinates[0] },
+                    title: d.foodName
+                  }))
+                ]}
+              />
+            </div>
+          </section>
+
+          {myMissions.length > 0 && (
+            <section className="lg:col-span-2 space-y-8">
+              <h2 className="text-2xl font-black text-primary-dark flex items-center gap-4">
+                <div className="bg-primary p-2.5 rounded-2xl shadow-lg shadow-primary/20 text-primary-dark">
+                  <Users size={24} />
                 </div>
                 Active Missions
               </h2>
-
-              <div className="space-y-6">
-                {myRequests.map(req => (
-                  <div key={req._id} className="bg-white p-8 rounded-[3rem] shadow-xl shadow-black/5 flex flex-col md:flex-row gap-8 items-center border border-slate-100">
-                    <div className="flex-1">
-                       <div className="flex items-center gap-3 mb-4">
-                          <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                            req.status === 'pending' ? 'bg-yellow-100 text-yellow-600' : 
-                            req.status === 'assigned' ? 'bg-blue-100 text-blue-600' : 
-                            'bg-emerald-100 text-emerald-600'
-                          }`}>
-                            {req.status}
-                          </span>
-                          <span className="text-slate-300">•</span>
-                          <span className="text-xs font-bold text-slate-400">ID: {req._id.slice(-6)}</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {myMissions.map((mission) => (
+                  <div key={mission._id} className="bg-white p-8 rounded-[3rem] shadow-xl shadow-black/5 border border-slate-50">
+                    <div className="flex justify-between items-start mb-6">
+                       <h4 className="text-xl font-black text-primary-dark">{mission.foodPost?.foodName}</h4>
+                       <span className="bg-emerald-50 text-emerald-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-100">{mission.status}</span>
+                    </div>
+                    {mission.status === 'assigned_to_trust' ? (
+                       <div className="flex gap-3">
+                          <select 
+                            onChange={(e) => mission._tempVolunteer = e.target.value}
+                            className="flex-1 bg-slate-50 border-none px-4 py-3 rounded-2xl font-bold text-xs outline-none focus:ring-4 ring-primary/20"
+                            defaultValue=""
+                          >
+                            <option value="" disabled>Select Volunteer</option>
+                            {volunteers.map(v => (
+                              <option key={v.firebaseId} value={v.firebaseId}>{v.name}</option>
+                            ))}
+                          </select>
+                          <button 
+                            onClick={() => handleAssign(mission._id, mission._tempVolunteer)}
+                            className="bg-primary text-primary-dark p-3 rounded-2xl shadow-lg shadow-primary/20 active:scale-90 transition-all font-black"
+                          >
+                             Assign
+                          </button>
                        </div>
-                       <h3 className="text-2xl font-black text-primary-dark mb-2">{req.foodPost?.foodName || 'Food Item'}</h3>
-                       <p className="text-slate-500 font-medium">Pickup from {req.foodPost?.donor?.name || 'Donor'}</p>
-                    </div>
-
-                    <div className="w-full md:w-auto flex flex-col gap-4">
-                      {req.status === 'pending' ? (
-                        <div className="flex flex-col gap-3 min-w-[250px]">
-                           <select 
-                            className="bg-surface border-none p-4 rounded-2xl font-bold text-sm outline-none"
-                            value={selectedVolunteer[req._id] || ''}
-                            onChange={(e) => setSelectedVolunteer({...selectedVolunteer, [req._id]: e.target.value})}
-                           >
-                              <option value="">Select Volunteer</option>
-                              {volunteers.map(v => (
-                                <option key={v._id} value={v._id}>{v.name}</option>
-                              ))}
-                           </select>
-                           <button 
-                            onClick={() => handleAssign(req._id)}
-                            className="btn-dark py-4 text-sm"
-                           >
-                            Assign Volunteer
-                           </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-4 bg-surface p-6 rounded-[2rem] min-w-[250px]">
-                           <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-primary font-black shadow-sm">
-                              {req.volunteer?.name?.charAt(0) || 'V'}
-                           </div>
-                           <div>
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned To</p>
-                              <p className="text-sm font-bold text-primary-dark">{req.volunteer?.name || 'Volunteer'}</p>
-                           </div>
-                        </div>
-                      )}
-                    </div>
+                    ) : (
+                       <p className="text-xs font-bold text-slate-400">Being handled by {mission.volunteer?.name || 'a volunteer'}</p>
+                    )}
                   </div>
                 ))}
-                {myRequests.length === 0 && (
-                  <div className="donatly-card bg-white py-12 text-center">
-                    <p className="text-slate-400 font-bold">No active missions to display.</p>
-                  </div>
-                )}
               </div>
             </section>
-          </div>
-
-          {/* Sidebar */}
-          <div className="lg:col-span-1 space-y-8">
-             <div className="bg-white p-6 rounded-[2.5rem] shadow-xl shadow-black/5 overflow-hidden border-4 border-white h-fit">
-                <h3 className="text-lg font-black mb-4 flex items-center gap-2 text-primary-dark">
-                  <div className="bg-primary p-1.5 rounded-lg">
-                     <MapPin size={16} />
-                  </div>
-                  Regional View
-                </h3>
-                <div className="h-[350px] rounded-[2rem] overflow-hidden">
-                  <MapComponent 
-                    center={{ lat: userData.location.coordinates[1], lng: userData.location.coordinates[0] }}
-                    markers={[
-                      ...nearbyFood.map(f => ({
-                        position: { lat: f.location.coordinates[1], lng: f.location.coordinates[0] },
-                        title: f.foodName,
-                        type: 'donor'
-                      })),
-                      ...myRequests.filter(r => r.foodPost).map(r => ({
-                        position: { lat: r.foodPost.location.coordinates[1], lng: r.foodPost.location.coordinates[0] },
-                        title: `Accepted: ${r.foodPost.foodName}`,
-                        type: 'trust'
-                      }))
-                    ]}
-                  />
-                </div>
-             </div>
-
-             <div className="bg-primary p-8 rounded-[2.5rem] text-primary-dark relative overflow-hidden h-fit">
-                <div className="relative z-10">
-                  <h3 className="text-2xl font-black mb-4">Quick Stats</h3>
-                  <div className="space-y-4">
-                     <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-md">
-                        <div className="text-3xl font-black">{myRequests.length}</div>
-                        <div className="text-[10px] font-black uppercase opacity-60">Total Missions</div>
-                     </div>
-                     <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-md">
-                        <div className="text-3xl font-black">{volunteers.length}</div>
-                        <div className="text-[10px] font-black uppercase opacity-60">Volunteers Online</div>
-                     </div>
-                  </div>
-                </div>
-                <Users className="absolute -bottom-6 -right-6 text-black/5" size={160} />
-             </div>
-          </div>
+          )}
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
