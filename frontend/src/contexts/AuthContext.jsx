@@ -75,6 +75,17 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
+  async function refreshUserData() {
+    if (currentUser) {
+      try {
+        const response = await axios.get(`${API_URL}/users/${currentUser.uid}`);
+        setUserData(response.data);
+      } catch (err) {
+        console.error("Error refreshing user data", err);
+      }
+    }
+  }
+
   const value = {
     currentUser,
     userData,
@@ -83,7 +94,8 @@ export function AuthProvider({ children }) {
     signup,
     login,
     logout,
-    resetPassword
+    resetPassword,
+    refreshUserData
   };
 
   return (
